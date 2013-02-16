@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RuneSlinger.Server", "RuneSlinger.Server\RuneSlinger.Server.csproj", "{CD8542D1-9289-4DC2-9A3D-FCD7F98F33CC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RuneSlinger.Base", "RuneSlinger.Base\RuneSlinger.Base.csproj", "{C3C5ECB4-C1A8-460C-800E-9A1D163028C8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug-3dmancer|Any CPU = Debug-3dmancer|Any CPU
@@ -13,6 +15,10 @@ Global
 		{CD8542D1-9289-4DC2-9A3D-FCD7F98F33CC}.Debug-3dmancer|Any CPU.Build.0 = Debug-3dmancer|Any CPU
 		{CD8542D1-9289-4DC2-9A3D-FCD7F98F33CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CD8542D1-9289-4DC2-9A3D-FCD7F98F33CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3C5ECB4-C1A8-460C-800E-9A1D163028C8}.Debug-3dmancer|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3C5ECB4-C1A8-460C-800E-9A1D163028C8}.Debug-3dmancer|Any CPU.Build.0 = Debug|Any CPU
+		{C3C5ECB4-C1A8-460C-800E-9A1D163028C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3C5ECB4-C1A8-460C-800E-9A1D163028C8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

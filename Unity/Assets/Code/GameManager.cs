@@ -1,49 +1,110 @@
 using System.Collections.Generic;
 using ExitGames.Client.Photon;
+using RuneSlinger.Base;
 using UnityEngine;
 
 public class GameManager : MonoBehaviour, IPhotonPeerListener
 {
+    enum GameManagerState
+    {
+        Form,
+        Sending,
+        Error,
+        Success
+    }
+
     private PhotonPeer _photonPeer;
-    private string _message;
-    private List<string> _messages;
-	public void Start () 
+    private string _registerEmail;
+    private string _registerPassword;
+    private string _loginEmail;
+    private string _loginPassword;
+    private string _username;
+    private string _error;
+    private GameManagerState _state;
+
+    public void Start()
     {
         _photonPeer = new PhotonPeer(this, ConnectionProtocol.Udp);
-	    if(!_photonPeer.Connect("127.0.0.1:5055", "RuneSlinger"))
-	        Debug.LogError("Could not connect to photon!");
+        if (!_photonPeer.Connect("127.0.0.1:5055", "RuneSlinger"))
+            Debug.LogError("Could not connect to photon!");
 
-	    _message = "TYPE HERE";
-        _messages = new List<string>();
+        _registerEmail = "";
+        _username = "";
+        _registerPassword = "";
+        _loginEmail = "";
+        _loginPassword = "";
+        _state = GameManagerState.Form;
     }
-	
-	public void Update () 
+
+    public void Update()
     {
-	    _photonPeer.Service();
-	}
+        _photonPeer.Service();
+    }
 
     public void OnGUI()
     {
-        _message = GUI.TextField(new Rect(0, 0, 200, 40), _message);
+        GUILayout.BeginVertical(GUILayout.Width(800), GUILayout.Height(600));
 
-        if (GUI.Button(new Rect(0, 45, 100, 40), "Send Message"))
+        if (_state == GameManagerState.Form || _state == GameManagerState.Error)
         {
-            SendServer(_message);
-            _message = "";
-        }
+            GUILayout.Label("REGISTER RUNESLINGER ACCOUNT");
 
-        GUI.Label(new Rect(0, 90, 300, 500), string.Join("\n", _messages.ToArray()));
+            if (_state == GameManagerState.Error)
+                GUILayout.Label(string.Format("Error: {0}", _error));
+
+            GUILayout.Label("Username");
+            _username = GUILayout.TextField(_username);
+
+            GUILayout.Label("Email");
+            _registerEmail = GUILayout.TextField(_registerEmail);
+
+            GUILayout.Label("Password");
+            _registerPassword = GUILayout.TextField(_registerPassword);
+
+            if (GUILayout.Button("Register"))
+                Register(_username, _registerPassword, _registerEmail);
+
+            GUILayout.Label("LOGIN RUNESLINGER ACCOUNT");
+
+            GUILayout.Label("Email:");
+            _loginEmail = GUILayout.TextField(_loginEmail);
+
+            GUILayout.Label("Password:");
+            _loginPassword = GUILayout.TextField(_loginPassword);
+
+            if (GUILayout.Button("Login"))
+                Login(_loginEmail, _loginPassword);
+        }
+        else if (_state == GameManagerState.Sending)
+        {
+            GUILayout.Label("Sending...");
+        }
+        else if (_state == GameManagerState.Success)
+        {
+            GUILayout.Label("Success!");
+        }
+        GUILayout.EndVertical();
     }
 
-    private void SendServer(string message)
+    private void Login(string email, string password)
     {
-        _photonPeer.OpCustom(
-            0,
-            new Dictionary<byte, object>
-            {
-                {0, message}
-            },
-            true);
+        _state = GameManagerState.Sending;
+        _photonPeer.OpCustom((byte)RuneOperationCode.Login, new Dictionary<byte, object>
+        {
+            {(byte)RuneOperationCodeParameter.Email, email},
+            {(byte)RuneOperationCodeParameter.Password, password},
+        }, true);
+    }
+
+    private void Register(string username, string password, string email)
+    {
+        _state = GameManagerState.Sending;
+        _photonPeer.OpCustom((byte) RuneOperationCode.Register, new Dictionary<byte, object>
+        {
+            {(byte)RuneOperationCodeParameter.Username, username},
+            {(byte)RuneOperationCodeParameter.Email, email},
+            {(byte)RuneOperationCodeParameter.Password, password},
+        }, true);
     }
 
     public void OnApplicationQuit()
@@ -57,6 +118,20 @@ public class GameManager : MonoBehaviour, IPhotonPeerListener
 
     public void OnOperationResponse(OperationResponse operationResponse)
     {
+        var response = (RuneOperationResponse) operationResponse.OperationCode;
+        if (response == RuneOperationResponse.Error)
+        {
+            _state = GameManagerState.Error;
+            _error = (string)operationResponse.Parameters[(byte) RuneOperationResponseParameter.ErrorMessage];
+        }
+        else if (response == RuneOperationResponse.FatalError || response == RuneOperationResponse.Invalid)
+        {
+            _state = GameManagerState.Error;
+            _error = "YOU BROKE THE SERVER!";
+        }
+        else if (response == RuneOperationResponse.Success)
+            _state = GameManagerState.Success;
+        
     }
 
     public void OnStatusChanged(StatusCode statusCode)
@@ -65,6 +140,5 @@ public class GameManager : MonoBehaviour, IPhotonPeerListener
 
     public void OnEvent(EventData eventData)
     {
-        _messages.Add(eventData.Parameters[0].ToString());
     }
 }
