@@ -2,9 +2,7 @@
 {
     public enum RuneOperationCodeParameter : byte
     {
-        Username,
-        Password,
-        Email,
-        Message
+        CommandType,
+        CommandBytes
     }
 }

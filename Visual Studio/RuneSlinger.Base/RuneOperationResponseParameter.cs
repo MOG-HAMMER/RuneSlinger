@@ -2,6 +2,8 @@
 {
     public enum RuneOperationResponseParameter : byte
     {
-        ErrorMessage
+        CommandResponse,
+        OperationErrors,
+        PropertyErrors
     }
 }

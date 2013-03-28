@@ -1,19 +1,20 @@
 using System.Collections.Generic;
 using ExitGames.Client.Photon;
 using RuneSlinger.Base;
+using RuneSlinger.Base.Commands;
 using UnityEngine;
 
-public class GameManager : MonoBehaviour, IPhotonPeerListener
+public class GameManager : MonoBehaviour
 {
     enum GameManagerState
     {
         Form,
         Sending,
         Error,
-        Success
+        LoggedIn
     }
 
-    private PhotonPeer _photonPeer;
+    private string _displayUsername;
     private string _registerEmail;
     private string _registerPassword;
     private string _loginEmail;
@@ -24,9 +25,7 @@ public class GameManager : MonoBehaviour, IPhotonPeerListener
 
     public void Start()
     {
-        _photonPeer = new PhotonPeer(this, ConnectionProtocol.Udp);
-        if (!_photonPeer.Connect("127.0.0.1:5055", "RuneSlinger"))
-            Debug.LogError("Could not connect to photon!");
+        
 
         _registerEmail = "";
         _username = "";
@@ -38,7 +37,7 @@ public class GameManager : MonoBehaviour, IPhotonPeerListener
 
     public void Update()
     {
-        _photonPeer.Service();
+
     }
 
     public void OnGUI()
@@ -79,9 +78,9 @@ public class GameManager : MonoBehaviour, IPhotonPeerListener
         {
             GUILayout.Label("Sending...");
         }
-        else if (_state == GameManagerState.Success)
+        else if (_state == GameManagerState.LoggedIn)
         {
-            GUILayout.Label("Success!");
+            GUILayout.Label("Success: " + _displayUsername);
         }
         GUILayout.EndVertical();
     }
@@ -89,56 +88,38 @@ public class GameManager : MonoBehaviour, IPhotonPeerListener
     private void Login(string email, string password)
     {
         _state = GameManagerState.Sending;
-        _photonPeer.OpCustom((byte)RuneOperationCode.Login, new Dictionary<byte, object>
+        NetworkManager.Instance.Dispatch(new LoginCommand(_loginEmail, _loginPassword), response =>
         {
-            {(byte)RuneOperationCodeParameter.Email, email},
-            {(byte)RuneOperationCodeParameter.Password, password},
-        }, true);
+            if (response.IsValid)
+            {
+                _state = GameManagerState.LoggedIn;
+                _displayUsername = response.Response.Username;
+            }
+            else
+            {
+                _state = GameManagerState.Error;
+                _error = response.ToErrorString();
+            }
+            
+        });
     }
 
     private void Register(string username, string password, string email)
     {
-        _state = GameManagerState.Sending;
-        _photonPeer.OpCustom((byte) RuneOperationCode.Register, new Dictionary<byte, object>
-        {
-            {(byte)RuneOperationCodeParameter.Username, username},
-            {(byte)RuneOperationCodeParameter.Email, email},
-            {(byte)RuneOperationCodeParameter.Password, password},
-        }, true);
-    }
-
-    public void OnApplicationQuit()
-    {
-        _photonPeer.Disconnect();
-    }
-
-    public void DebugReturn(DebugLevel level, string message)
-    {
-    }
-
-    public void OnOperationResponse(OperationResponse operationResponse)
-    {
-        var response = (RuneOperationResponse) operationResponse.OperationCode;
-        if (response == RuneOperationResponse.Error)
-        {
-            _state = GameManagerState.Error;
-            _error = (string)operationResponse.Parameters[(byte) RuneOperationResponseParameter.ErrorMessage];
-        }
-        else if (response == RuneOperationResponse.FatalError || response == RuneOperationResponse.Invalid)
-        {
-            _state = GameManagerState.Error;
-            _error = "YOU BROKE THE SERVER!";
-        }
-        else if (response == RuneOperationResponse.Success)
-            _state = GameManagerState.Success;
         
-    }
-
-    public void OnStatusChanged(StatusCode statusCode)
-    {
-    }
-
-    public void OnEvent(EventData eventData)
-    {
+        _state = GameManagerState.Sending;
+        NetworkManager.Instance.Dispatch(new RegisterCommand(email, username, password), response =>
+        {
+            if (response.IsValid)
+            {
+                _state = GameManagerState.LoggedIn;
+                _displayUsername = username;
+            }
+            else
+            {
+                _state = GameManagerState.Error;
+                _error = response.ToErrorString();
+            }
+        });
     }
 }

@@ -1,13 +1,14 @@
 ﻿using System;
-using System.Linq;
 using System.Collections.Generic;
-using NHibernate;
-using NHibernate.Linq;
+using System.IO;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Bson;
 using Photon.SocketServer;
 using PhotonHostRuntimeInterfaces;
 using RuneSlinger.Base;
-using RuneSlinger.Server.Entities;
-using RuneSlinger.Server.ValueObjects;
+using RuneSlinger.Base.Abstract;
+using RuneSlinger.Base.Commands;
+using RuneSlinger.Server.CommandHandlers;
 using log4net;
 
 namespace RuneSlinger.Server
@@ -17,47 +18,67 @@ namespace RuneSlinger.Server
         private static ILog Log = LogManager.GetLogger(typeof (RunePeer));
 
         private readonly Application _application;
+        private readonly JsonSerializer _jsonSerializer;
 
         public RunePeer(Application application, InitRequest initRequest)
             : base(initRequest.Protocol, initRequest.PhotonPeer)
         {
             _application = application;
+            _jsonSerializer = new JsonSerializer();
+
             Log.InfoFormat("Peer created at {0}:{1}", initRequest.RemoteIP, initRequest.RemotePort);
 
         }
 
         protected override void OnOperationRequest(OperationRequest operationRequest, SendParameters sendParameters)
         {
+            if (operationRequest.OperationCode != (byte) RuneOperationCode.DispatchCommand)
+            {
+                SendOperationResponse(new OperationResponse((byte) RuneOperationResponse.Invalid), sendParameters);
+                Log.WarnFormat("Peer sent unknown operation code: {0}", operationRequest.OperationCode);
+                return;
+            }
+
             using (var session = _application.OpenSession())
             {
                 using (var trans = session.BeginTransaction())
                 {
                     try
                     {
-                        var opCode = (RuneOperationCode) operationRequest.OperationCode;
+                        var commandContext = new CommandContext();
+                        var commandType = (string)operationRequest.Parameters[(byte)RuneOperationCodeParameter.CommandType];
+                        var commandBytes = (byte[])operationRequest.Parameters[(byte)RuneOperationCodeParameter.CommandBytes];
+                        
+                        ICommand command;
+                        using (var ms = new MemoryStream(commandBytes))
+                            command = (ICommand) _jsonSerializer.Deserialize(new BsonReader(ms), Type.GetType(commandType));
 
-                        if (opCode == RuneOperationCode.Register)
-                        {
-                            var username = (string) operationRequest.Parameters[(byte) RuneOperationCodeParameter.Username];
-                            var password = (string) operationRequest.Parameters[(byte) RuneOperationCodeParameter.Password];
-                            var email = (string) operationRequest.Parameters[(byte) RuneOperationCodeParameter.Email];
-                            Register(session, username, password, email);
-                        }
-                        else if (opCode == RuneOperationCode.Login)
-                        {
-                            var password = (string) operationRequest.Parameters[(byte) RuneOperationCodeParameter.Password];
-                            var email = (string) operationRequest.Parameters[(byte) RuneOperationCodeParameter.Email];
-                            Login(session, password, email);
-                        }
-                        else if (opCode == RuneOperationCode.SendMessage)
-                        {
-                            var message = (string) operationRequest.Parameters[(byte) RuneOperationCodeParameter.Message];
-                            SendMessage(session, message);
-                        }
+                        var loginCommand = command as LoginCommand;
+                        var registerCommand = command as RegisterCommand;
+
+                        if (loginCommand != null)
+                            (new LoginHandler(session)).Handle(commandContext, loginCommand);
+                        
+                        else if (registerCommand != null)
+                            (new RegisterHandler(session)).Handle(commandContext, registerCommand);
+                        
                         else
                         {
-                            SendOperationResponse(new OperationResponse((byte)RuneOperationResponse.Invalid), sendParameters);
+                            SendOperationResponse(new OperationResponse((byte) RuneOperationResponse.Invalid), sendParameters);
+                            Log.WarnFormat("Peer sent unknown command: {0}", commandType);
+                            trans.Rollback();
+                            return;
                         }
+
+                        var parameters = new Dictionary<byte, object>();
+
+                        if (commandContext.Response != null)
+                            parameters[(byte) RuneOperationResponseParameter.CommandResponse] = SerializeBSON(commandContext.Response);
+
+                        parameters[(byte)RuneOperationResponseParameter.OperationErrors] = SerializeBSON(commandContext.OperationErrors);
+                        parameters[(byte)RuneOperationResponseParameter.PropertyErrors] = SerializeBSON(commandContext.PropertyErrors);
+
+                        SendOperationResponse(new OperationResponse((byte)RuneOperationResponse.CommandDispatched, parameters), sendParameters);
 
                         trans.Commit();
                     }
@@ -72,58 +93,13 @@ namespace RuneSlinger.Server
             }
         }
 
-        private void Register(ISession session, string username, string password, string email)
+        private byte[] SerializeBSON(object obj)
         {
-            if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(email))
+            using (var ms = new MemoryStream())
             {
-                SendError("All fields are required.");
-                return;
+                _jsonSerializer.Serialize(new BsonWriter(ms), obj);
+                return ms.ToArray();
             }
-
-            if (username.Length > 128)
-            {
-                SendError("Username must be less than 128 characters long.");
-                return;
-            }
-
-            if (email.Length > 200)
-            {
-                SendError("Email must be less than 200 characters long.");
-                return;
-            }
-
-            if (session.Query<User>().Any(t => t.Username == username || t.Email == email))
-            {
-                SendError("Username and email must be unique!");
-                return;
-            }
-
-            var user = new User
-            {
-                Username = username,
-                Email = email,
-                CreatedAt = DateTime.UtcNow,
-                Password = HashedPassword.FromPlaintext(password)
-            };
-
-            session.Save(user);
-            SendSuccess();
-        }
-
-        private void Login(ISession session, string password, string email)
-        {
-            var user = session.Query<User>().SingleOrDefault(s => s.Email == email);
-            if (user == null || !user.Password.EqualsPlaintext(password))
-            {
-                SendError("Email or password was incorrect.");
-                return;
-            }
-
-            SendSuccess();
-        }
-
-        private void SendMessage(ISession session, string message)
-        {
         }
 
         protected override void OnDisconnect(DisconnectReason reasonCode, string reasonDetail)
@@ -132,23 +108,6 @@ namespace RuneSlinger.Server
             _application.DestroyPeer(this); 
         }
 
-        private void SendSuccess()
-        {
-            SendOperationResponse(new OperationResponse((byte) RuneOperationResponse.Success),
-                                  new SendParameters {Unreliable = false});
-
-        }
-
-        private void SendError(string message)
-        {
-            SendOperationResponse(new OperationResponse((byte)RuneOperationResponse.Error, new Dictionary<byte, object>
-            {
-                {(byte) RuneOperationResponseParameter.ErrorMessage, message}
-            }), new SendParameters
-            {
-                Unreliable = false
-            });
-
-        }
+        
     } 
 }

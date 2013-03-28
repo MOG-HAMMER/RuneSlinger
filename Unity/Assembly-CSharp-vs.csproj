@@ -44,12 +44,19 @@
 	</Reference>
   </ItemGroup>
   <ItemGroup>
+     <Compile Include="Assets\Code\CommandContext.cs" />
+     <Compile Include="Assets\Code\CommandContext`.cs" />
      <Compile Include="Assets\Code\GameManager.cs" />
- <Reference Include="Photon3Unity3D">
- <HintPath>Assets\Assemblies\Photon3Unity3D.dll</HintPath>
- </Reference>
+     <Compile Include="Assets\Code\NetworkManager.cs" />
+     <None Include="Assets\_Assemblies\Newtonsoft.Json.xml" />
  <Reference Include="RuneSlinger.Base">
  <HintPath>Assets\_Assemblies\RuneSlinger.Base.dll</HintPath>
+ </Reference>
+ <Reference Include="Newtonsoft.Json">
+ <HintPath>Assets\_Assemblies\Newtonsoft.Json.dll</HintPath>
+ </Reference>
+ <Reference Include="Photon3Unity3D">
+ <HintPath>Assets\Assemblies\Photon3Unity3D.dll</HintPath>
  </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

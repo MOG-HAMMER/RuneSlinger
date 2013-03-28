@@ -3,8 +3,7 @@
     public enum RuneOperationResponse : byte
     {
         Invalid,
-        Error,
         FatalError,
-        Success
+        CommandDispatched
     }
 }
